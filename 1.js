@@ -3,11 +3,13 @@
 * Image slider that supports swiping function to change slides.
 */
 (function ($) {
-  
+  self=this;
+  self.data;//用于存放url请求过来的数据
   $.fn.swipeslider = function (options) {
     var slideContainer = this;
     var slider = this.find('.sw-slides'); // reference to slider
     var defaultSettings = {
+      data1:0,
       /**
       / How long one slide will change the other.
       */
@@ -42,7 +44,6 @@
       */
       sliderHeight: '60%'
     };
-
     var settings = $.extend(defaultSettings, options);
 
     // Privates //
@@ -55,7 +56,7 @@
     var startClientX = 0;
     var startPixelOffset = 0;
     var pixelOffset = 0;
-    var currentSlide = 0;
+    var currentSlide = 1;
     var slideCount = 0;
     // Overall width of sliders.
     var slidesWidth = 0;
@@ -71,6 +72,7 @@
     /** 
     * Set initial values.
     */
+    playaudio();//第一页的audio
     (function init() {
       $(slideContainer).css('padding-top', settings.sliderHeight);
       
@@ -87,7 +89,6 @@
       slider.find('.sw-slide:last-child').clone().prependTo(slider);
       slider.find('.sw-slide:nth-child(2)').clone().appendTo(slider);
       slideCount = slider.find('.sw-slide').length;
-      
       if(settings.bullets) {
         insertBullets(slideCount - 2);
       }
@@ -189,16 +190,13 @@
       if (slidingState == 2) {
         // Reset sliding state.
         slidingState = 0;
-
         // Calculate which slide need to be in view.
         currentSlide = pixelOffset < startPixelOffset ? currentSlide + 1 : currentSlide -1;
-
         // Make sure that unexisting slides weren't selected.
         currentSlide = Math.min(Math.max(currentSlide, 0), slideCount - 1);
-
         // Since in this example slide is full viewport width offset can be calculated according to it.
         pixelOffset = currentSlide * -slidesWidth;
-        play(currentSlide);
+        playaudio()
         disableSwipe();
         switchSlide();
         enableAutoPlay();
@@ -265,44 +263,15 @@
     */
     function switchForward() {
       currentSlide += 1;
-      play(currentSlide);
+      playaudio();
       switchSlide();
     }
-    function add_new_audio(){
-      $('body').append("<audio id=\"audio"+currentSlide+"\" src=\"pic/"+currentSlide+".mp3\" width=\"0\" height=\"0\" >");
-      var t=$("#audio"+currentSlide)[0];
-      t.play();
-    }
-    function set_new_interval(){ 
-      //$('body')append("<audio id=\"audio"+currentSlide+"\" src=\"pic/"+currentSlide+".mp3 \" width=\"0\" height=\"0\" >"); 
-          var t=$("#audio"+currentSlide)[0];
-          if(typeof(t)!="undefined"){
-          console.log($("#audio"+currentSlide)[0]);
-          if(!isNaN(t.duration)){
-          console.log(t.duration);
-          autoPlayTimeout=1000*t.duration+4000;//这里的值要比下面的settimeout要大 ，不然会bug
-          console.log(autoPlayTimeout);
-        }else{
-          console.log(t.duration,t);
-        }
-      }
-    }
-    function play(currentSlide){
-        if(currentSlide<11){
-          var s="$('body').append(\"<audio id=\\\"audio"+currentSlide+"\\\" src=\\\"pic/"+currentSlide+".mp3\\\" width=\\\"0\\\" height=\\\"0\\\" >\"); $(\"#audio"+currentSlide+"\")[0].play();";
-          console.log(s);
-          $('body').children('audio').remove();//删除之前已经放过的音频
-          window.setTimeout(add_new_audio,1100);
-          window.setTimeout(set_new_interval,1300);//设置新的自动播放间隔
-        }
-    }
-
     /**
     * Switches slideshow one slide backward.
     */
     function switchBackward() {
       currentSlide -= 1;
-      play(currentSlide);
+      playaudio();
       switchSlide();
     }
     
@@ -320,7 +289,35 @@
       }
       setActiveBullet(currentSlide);
     }
-
+    /**
+     *输入当前的currentslide，按照顺序插入当强页面应有的audio
+     */
+    function playaudio(){
+      var bug=currentSlide-1;//修复原有bug，currentslide不能从0开始，不然会跃变至1导致错位
+      bug=Math.min(bug,slideCount-3);
+      bug=Math.max(bug,0);
+      if(currentSlide==slideCount-1){
+        console.log("here");
+        bug=0;
+      }
+      console.log("页数",bug,"currentSlide",currentSlide);
+      if(typeof(self.data.data.pagelist[bug].audiolist)!="undefined"){
+        for(var i=0;i<self.data.data.pagelist[bug].audiolist.length;i++){
+          $('body').children('audio').remove();//删除之前已经放过的音频
+          $('body').append("<audio id=\"audio"+bug+i+"\" src=\""+self.data.data.pagelist[bug].audiolist[i].audio_url+"\" width=\"0\" height=\"0\"></audio>");
+          console.log(self.data.data.pagelist[bug].audiolist[i].audio_url,self.data.data.pagelist[bug].page_id);
+          if(i>0){
+            var s="$(\"#audio"+bug+i+"\")[0].play();";
+            setTimeout(s,self.data.data.pagelist[bug].audiolist[i-1].audio_length*1000+2000);
+          }else{
+            setTimeout("$(\"#audio"+bug+""+i+"\")[0].play();",2000);
+            //$("#audio"+bug+""+i)[0].play();
+            autoPlayTimeout=self.data.data.pagelist[bug].audiolist[i].audio_length*1000+5000;
+          }
+        }
+      }
+      console.log(autoPlayTimeout,bug);
+    }
     /**
     * Switches slideshow to the first slide.
     * Remark: the first slide from html elements, not the slide that was added for smooth transition effect.
@@ -457,7 +454,6 @@
         })(i);
       }
     }
-    
     /**
     * Sets active bullet mark of active slide.
     * @param number {Number} active slide with respect of two added slides. 
@@ -472,11 +468,30 @@
       } else {
         activeBullet = number - 1;
       }
-      
       slideContainer.find('.sw-bullet').find('li').removeClass('active');
       slideContainer.find('.sw-slide-' + activeBullet).addClass('active');
     }
 
     return slideContainer;    
   }
+
+  /**
+   * 根据请求的数据，动态创建页面
+   */
+  $.fn.initPage=function(){
+    console.log(self.data);
+    if(self.data.data.pagelist.length){
+      for(var i=0;i<self.data.data.pagelist.length;i++) {
+        $('.sw-slides').append("<li class=\"sw-slide\" id=\"ii\"> <img src=\"" + self.data.data.pagelist[i].image_url + "\" > </li>");
+      }
+    }
+    var num=$('img').length;
+    $('img').load(function(){
+      num-=1;
+      if(num==0){
+        $('#full_feature').swipeslider();
+      }
+    });
+  }
+
 }(jQuery));
